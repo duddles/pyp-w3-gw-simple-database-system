@@ -2,9 +2,9 @@ import os
 import json
 from datetime import date
 
-from simple_database.exceptions import ValidationError
+from .config import BASE_DB_FILE_PATH
 
-BASE_DB_FILE_PATH = '/tmp/simple_database/'
+from simple_database.exceptions import ValidationError
 
 
 class BaseRowModel(object):

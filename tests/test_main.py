@@ -5,7 +5,8 @@ import shutil
 import unittest
 from datetime import date
 
-from simple_database.main import *
+from simple_database import create_database, connect_database
+from simple_database.config import BASE_DB_FILE_PATH
 from simple_database.exceptions import ValidationError
 
 

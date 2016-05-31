@@ -1,7 +1,7 @@
 # [pyp-w2] Simple Database System
 
 You'll need to build a simple database system using files.
-The fact that your database is using files underneath should be COMPLETELY hidden to your user.
+The fact that your database is using files underneath should be **COMPLETELY** hidden to your user.
 From the outside (public interface), the user must play with your database library as any other
 database client, without knowing how it works internally.
 
@@ -17,6 +17,15 @@ or connect to an existing one:
 >>> db = connect_database('library')  # library DB already exists
 ```
 
+To display the whole list of tables in a database, use the `show_tables` function:
+
+```python
+>>> db.show_tables()
+["authors"]
+```
+
+## Tables
+
 Once you have your database connection, you must be able to create tables in the database.
 While creating a table, you must provide the columns configuration with proper names and data types for each of them.
 
@@ -30,22 +39,22 @@ While creating a table, you must provide the columns configuration with proper n
 ])
 ```
 
-After the table creation, a new dynamic database attribute with the name of the table will be available: `db.authors`. This attribute will allow us perform any operations at a table level.
-For example, to count the amount of rows in the table, we can use the `count` function:
+After the table is created, a new dynamic database attribute with the name of the table will be available. In the example above, when we created the table `authors`, we should see the following attribute: `db.authors`. That attribute will be the main accessor for table-level operations. That means, any time we want to interact with the _authors_ table, we'll have to do it through `db.authors`.
+
+There are a few operations we can do in a table-level fashion:
+
+### Table count
+
+We should be able to get the count of rows in the table, using the `count()` method of that table:
 
 ```python
 >>> db.authors.count()
 0
 ```
 
-To display the whole list of tables in a database, use the `show_tables` function:
+### Inserting data
 
-```python
->>> db.show_tables()
-["authors"]
-```
-
-We are now ready to start feeding the table with data. To do that, use the `insert` table function (make sure to respect the column order and data types):
+We need to use the `insert` table method to insert data in the table. You have to make sure the column order and data types are respected:
 
 ```python
 >>> db.authors.insert(1, 'Jorge Luis Borges', date(1899, 8, 24), 'ARG', False)
@@ -57,9 +66,11 @@ While inserting data, errors might occur:
 >>> db.authors.insert(1, 'Jorge Luis Borges', date(1899, 8, 24), 'ARG', False, 'something-else')
 ValidationError: Invalid amount of fields.
 
->>> db.authors.insert(1, 'Jorge Luis Borges', "1899-8-24", 'ARG', False)  # must be a date object
+>>> db.authors.insert(1, 'Jorge Luis Borges', "1899-8-24", 'ARG', False) # must be a date object
 ValidationError: 'Invalid type of field "birth_date": Given "str", expected "date"'
 ```
+
+### Getting information from a table
 
 If you need to see the columns configuration of certain table, you can execute the `describe` function:
 
@@ -74,24 +85,32 @@ If you need to see the columns configuration of certain table, you can execute t
 ]
 ```
 
-After inserting data in your tables, you probably want to query it. For that, use the `query` table function. The result must be a generator, which should allow the use to loop through all rows that matched given query:
+### Querying
+
+After inserting data in your tables, you probably want to query it. To do so we use the `query` table method. The result must be an iterator:
 
 ```python
->>> gen = self.db.authors.query(nationality='ARG')
->>> for author in gen:
+>>> arg_authors = self.db.authors.query(nationality='ARG')
+>>> for author in arg_authors:
         print(author.name)
 "Jorge Luis Borges"
 "Julio Cortázar"
 ```
 
-Note that each element yielded by the generator must be a custom object, with dynamic attributes containing each of the row columns (ie: "id", "name", "birth_date", etc)
+Note that each element returned by the iterator must be a custom object, with dynamic attributes containing values per each column in the row (ie: "id", "name", "birth_date", etc)
 
-To fetch the whole list of rows in the table without any filtering, use the `all` table function:
+To fetch the whole list of rows in the table without any filtering, use the `all` table method:
 
 ```python
 >>> gen = self.db.authors.all()
 ```
 
-The result returned by `all` is also a generator, following the same specifications as the `query` function.
+The result returned by `all` is also an iterator, following the same specifications as the `query` function.
 
-Please feel free to implement any extra functionalities around this database client (ie: sorting, indexing, default values, unique values, required values, foreign keys to other tables, etc)
+## Extra points
+
+There's a huge room for improvement in this specification. You can take a lot of learning from this example, after all, you're implementing a real database system. Some functionalities missing:
+* Sorting
+* indexing
+* Default, unique, required values
+* Foreign keys

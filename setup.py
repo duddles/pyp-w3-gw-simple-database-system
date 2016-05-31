@@ -32,10 +32,7 @@ setup(
     packages=['simple_database'],
     maintainer='rmotr.com',
     tests_require=[
-        'pytest==2.9.1',
-        'pytest-cov==2.2.1',
-        'coverage==4.0.3',
-        'responses==0.5.1',
+        'pytest==2.9.1'
     ],
     zip_safe=False,
     cmdclass={'test': PyTest},
