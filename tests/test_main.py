@@ -18,9 +18,15 @@ class SimpleDatabaseTestCase(unittest.TestCase):
         # initial clean up
         if os.path.exists(BASE_DB_FILE_PATH):
             shutil.rmtree(BASE_DB_FILE_PATH)
-
-        self.db = create_database('library' + str(datetime.now().second))
+        
+        n = datetime.now()
+        fmt = 'library{}' + '{:02}' * 5
+        db_name = fmt.format(
+            n.year, n.month, n.day, n.hour, n.minute, n.second
+        )
+        self.db = create_database(db_name)
         sleep(1)
+        # self.db = create_database('library')
         self.db.create_table('authors', columns=[
             {'name': 'id', 'type': 'int'},
             {'name': 'name', 'type': 'str'},
@@ -36,7 +42,7 @@ class SimpleDatabaseTestCase(unittest.TestCase):
             shutil.rmtree(BASE_DB_FILE_PATH)
 
     def test_create_database(self):
-        db = create_database('test-db')
+        db = create_database('test-db2')
         self.assertEqual(db.show_tables(), [])
         db.create_table('authors', columns=[
             {'name': 'id', 'type': 'int'},
@@ -55,11 +61,10 @@ class SimpleDatabaseTestCase(unittest.TestCase):
     def test_create_database_duplicated_name(self):
         with self.assertRaisesRegexp(ValidationError,
                                      'Database with name "library" already exists.'):
-            create_database('library') 
-            #create_database('test-db') # we added this
+            create_database('library')
 
     def test_connect_existing_database(self):
-        db = create_database('test-db')
+        db = create_database('test-db1')
         db.create_table('authors', columns=[
             {'name': 'id', 'type': 'int'},
             {'name': 'name', 'type': 'str'},
@@ -70,7 +75,7 @@ class SimpleDatabaseTestCase(unittest.TestCase):
         db.authors.insert(1, 'Jorge Luis Borges', date(1899, 8, 24), 'ARG', False)
         self.assertEqual(db.authors.count(), 1)
 
-        new_db = connect_database('test-db')
+        new_db = connect_database('test-db1')
         self.assertEqual(new_db.show_tables(), ['authors'])
         self.assertEqual(new_db.authors.count(), 1)
 
