@@ -165,7 +165,7 @@ class Table(object):
         
     def __str__(self):
         # first print the col_names as a header line
-        s = '\t'.join(col['name'] for col in self.columns)
+        s = '\t'.join(i for i in self.col_names)
         s += '\n'    
 
         # get the values for each row
