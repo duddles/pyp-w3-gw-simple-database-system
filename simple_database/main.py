@@ -1,12 +1,12 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 from datetime import date
+import yaml  # Avoids unicode conversion on json load
 
 from simple_database.exceptions import ValidationError
 from simple_database.config import BASE_DB_FILE_PATH
 import copy
-
-import sys # Can remove this when we fix the unicode issue
 
 # Commit changes immediately on making them?
 AUTOCOMMIT = True
@@ -19,7 +19,7 @@ def create_database(db_name):
     Creates and returns a database as long as it does not already exist
     '''
     # make sure a db with that name doesn't exist
-    if os.path.isfile(db_name):
+    if os.path.isfile(os.path.join(BASE_DB_FILE_PATH, db_name)):
         msg = 'Database with name "{}" already exists.'
         raise ValidationError(msg.format(db_name))
     
@@ -31,16 +31,16 @@ def connect_database(db_name):
     Connects to an existing database from a file and returns a database object
     '''
     # check if files exists, read it in
-    if not os.path.isfile(db_name):
+    if not os.path.isfile(os.path.join(BASE_DB_FILE_PATH, db_name)):
         raise ValidationError('Database does not exist.')
     
-    with open(db_name,'r') as f:
+    with open(os.path.join(BASE_DB_FILE_PATH, db_name),'r') as f:
         # [{}, {}, {}]
         # where each dict is a table and has these key, value pairs:
         # name: table name
         # columns: list of dicts that is paramater for create table
         # rows: list of rows where each row is parameters for Table.insert
-        data = json.load(f)
+        data = yaml.safe_load(f)
         
         db = Database(db_name)
         for table in data:
@@ -128,8 +128,13 @@ class Database(object):
             
             json_data.append(temp_dict)
             
-        with open(self._db_name,'w') as f:
-            json.dump(json_data, f)
+        try:
+            with open(os.path.join(BASE_DB_FILE_PATH, self._db_name),'w') as f:
+                json.dump(json_data, f)
+        except:
+            os.mkdir(BASE_DB_FILE_PATH)
+            with open(os.path.join(BASE_DB_FILE_PATH, self._db_name),'w') as f:
+                json.dump(json_data, f)
 
 class Table(object):
     def __init__(self, parent, name, columns):
@@ -177,9 +182,6 @@ class Table(object):
         # Read in the args - they should be in the same order as self.columns
         # Compare each arg to what type it should be
         for index, arg in enumerate(args):
-            if sys.version.startswith('2'):
-                if isinstance(arg, unicode):
-                    arg = arg.encode('ascii','ignore')
             col_name = self.columns[index]['name'] # for example: name, id, date, etc
             col_type = self.columns[index]['type'] # int, bool, str, etc
             if not isinstance(arg, type_dict[col_type]):
@@ -245,18 +247,3 @@ class Row(object):
     def __init__(self, col_names, row):
         for i, column in enumerate(col_names):
             setattr(self, column, row[i])
-
-# if (__name__ == '__main__'):
-    
-#     db = create_database('library')
-    
-#     db.create_table('authors', columns=[
-#         {'name': 'id', 'type': 'int'},
-#         {'name': 'name', 'type': 'str'},
-#         #{'name': 'birth_date', 'type': 'date'},
-#         {'name': 'nationality', 'type': 'str'},
-#         {'name': 'alive', 'type': 'bool'},
-#     ])
-#     #db.authors.insert(1, 'Jorge Luis Borges', date(1899, 8, 24), 'ARG', False)
-#     db.authors.insert(1, 'Jorge Luis Borges', 'ARG', False)
-#     db2 = connect_database('library')
