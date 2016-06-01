@@ -4,6 +4,8 @@ import types
 import shutil
 import unittest
 from datetime import date
+from datetime import datetime # Our addition
+from time import sleep # Our addition
 
 from simple_database import create_database, connect_database
 from simple_database.config import BASE_DB_FILE_PATH
@@ -17,7 +19,8 @@ class SimpleDatabaseTestCase(unittest.TestCase):
         if os.path.exists(BASE_DB_FILE_PATH):
             shutil.rmtree(BASE_DB_FILE_PATH)
 
-        self.db = create_database('library')
+        self.db = create_database('library' + str(datetime.now().second))
+        sleep(1)
         self.db.create_table('authors', columns=[
             {'name': 'id', 'type': 'int'},
             {'name': 'name', 'type': 'str'},
@@ -52,7 +55,8 @@ class SimpleDatabaseTestCase(unittest.TestCase):
     def test_create_database_duplicated_name(self):
         with self.assertRaisesRegexp(ValidationError,
                                      'Database with name "library" already exists.'):
-            create_database('library')
+            create_database('library') 
+            #create_database('test-db') # we added this
 
     def test_connect_existing_database(self):
         db = create_database('test-db')
