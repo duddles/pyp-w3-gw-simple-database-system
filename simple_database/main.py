@@ -1,29 +1,38 @@
 import os
 import json
 from datetime import date
+
 from simple_database.exceptions import ValidationError
 from simple_database.config import BASE_DB_FILE_PATH
 import copy
 
-import sys
+import sys # Can remove this when we fix the unicode issue
 
 # Commit changes immediately on making them?
 AUTOCOMMIT = True
-_dt_format = '{0.year}-{0.month:{1}}-{0.day:{1}}'
+
+
+# Primary database access functions
 
 def create_database(db_name):
+    '''
+    Creates and returns a database as long as it does not already exist
+    '''
     # make sure a db with that name doesn't exist
-    # print 'Creating a database'
     if os.path.isfile(db_name):
-        raise ValidationError('Database with name "{}" already exists.'.format(db_name))
+        msg = 'Database with name "{}" already exists.'
+        raise ValidationError(msg.format(db_name))
     
     # return db object
     return Database(db_name)
     
 def connect_database(db_name):
+    '''
+    Connects to an existing database from a file and returns a database object
+    '''
     # check if files exists, read it in
     if not os.path.isfile(db_name):
-        raise ValidationError('Database does not exist.'.format(db_name))
+        raise ValidationError('Database does not exist.')
     
     with open(db_name,'r') as f:
         # [{}, {}, {}]
@@ -31,7 +40,6 @@ def connect_database(db_name):
         # name: table name
         # columns: list of dicts that is paramater for create table
         # rows: list of rows where each row is parameters for Table.insert
-        # data = json.loads(f)
         data = json.load(f)
         
         db = Database(db_name)
@@ -45,7 +53,6 @@ def connect_database(db_name):
                 if column['type'] == 'date':
                     # Deserialize values in the date object columns
                     for row in table['rows']:
-                        #row[column['name']] = _deserialize_dt(row[column['name']])
                         row[i] = _deserialize_dt(row[i])
             
             # Insert the row in the db table
@@ -53,30 +60,32 @@ def connect_database(db_name):
                 db_table.insert(*row)
         
         return db
-        
+
+# Datetime.date <-> string conversion functions for json serialization
+
 def _serialize_dt(dt_obj): # date -> string
-    return _dt_format.format(dt_obj, '02')
+    return '{0.year}-{0.month:{1}}-{0.day:{1}}'.format(dt_obj, '02')
 
 def _deserialize_dt(value): # string -> datetime
     year = int(value[:4])
     month = int(value[5:7])
     day = int(value[8:])
     return date(year, month, day)
-    
+
+
 class Database(object):
     def __init__(self, db_name):
         self._tables = []
         self._db_name = db_name
         
     def __str__(self):
-        return "['{}']".format("', '".join(table.name for table in self._tables))
+        return "<Database object: '{}'".format(self._db_name)
     
     def create_table(self, table_name, columns):
         '''
         Reads in name of table and a list of columns where each column is a 
         dict with {'name': x, 'type: y}
         '''
-
         # check if there is already a table with that name
         if hasattr(self, table_name):
             raise ValidationError('Duplicate table name')
@@ -130,8 +139,8 @@ class Table(object):
         self.parent = parent # used by insert to call commit on the db instance
         self.name = name
         self.columns = columns
-        self.rows = [] # each row will be stored as a dict in this list
-        self.col_names = [col['name'] for col in self.columns] # id, name, birth, etc
+        self.rows = [] # each row will be stored as a list in this list
+        self.col_names = [col['name'] for col in self.columns]
         
     def __str__(self):
         # first print the col_names as a header line
@@ -158,21 +167,13 @@ class Table(object):
         '''
         # First validate number of fields for the new entry
         if len(args) != len(self.columns):
-            # print args, len(args)
-            # print self.columns, len(self.columns)
             raise ValidationError('Invalid amount of field')
         
         # use this to convert types that are in string format into types
-        # type_dict = {
-        #     'int':int,
-        #     'str':str,
-        #     'date':date,
-        #     'bool':bool
-        # }
         type_dict = {'date': date}
         type_dict.update(__builtins__)
         
-        row_list = [] # The new entry will be stored as a dict
+        row_list = [] # The new entry will be stored as a list
         # Read in the args - they should be in the same order as self.columns
         # Compare each arg to what type it should be
         for index, arg in enumerate(args):
@@ -182,13 +183,14 @@ class Table(object):
             col_name = self.columns[index]['name'] # for example: name, id, date, etc
             col_type = self.columns[index]['type'] # int, bool, str, etc
             if not isinstance(arg, type_dict[col_type]):
-            # if not isinstance(arg, __builtins__[col_type]):
-                # print 'arg = {}'.format(arg)
-                error_msg = 'Invalid type of field "{}": Given "{}", expected "{}"'.format(col_name, type(arg).__name__, col_type)
-                raise ValidationError(error_msg)
+                msg = 'Invalid type of field "{}": Given "{}", expected "{}"'
+                msg = msg.format(col_name, type(arg).__name__, col_type)
+                raise ValidationError(msg)
             else:
-                # add the key, value to our row dictionary
+                # append the argument to our row list
                 row_list.append(arg)
+        
+        # Since all type checks passed, insert the row in the table
         self.rows.append(row_list)
         
         # Commit the changes
@@ -218,19 +220,16 @@ class Table(object):
                 msg = 'column "{}" not defined in table "{}".'
                 raise ValueError(msg.format(key, self.name))
         
-        # If no arguments were passed to the query, yield every row
-        if not kwargs:
-            for row in self.rows:
-                yield Row(self.col_names, row)
-        
         # Iterate through the rows, and on each row check to see if the row
         #  values match the values passed for the respective keyword argument.
         #  If they all match, yield that row.
-        else:
-            for row in self.rows:
-                for key, value in kwargs.items():
-                    if row[self.col_names.index(key)] == value:
-                        yield Row(self.col_names, row)
+        for row in self.rows:
+            matches = True
+            for key, value in kwargs.items():
+                if row[self.col_names.index(key)] != value:
+                    matches = False
+            if matches:
+                yield Row(self.col_names, row)
     
     def all(self):
         '''
@@ -261,15 +260,3 @@ class Row(object):
 #     #db.authors.insert(1, 'Jorge Luis Borges', date(1899, 8, 24), 'ARG', False)
 #     db.authors.insert(1, 'Jorge Luis Borges', 'ARG', False)
 #     db2 = connect_database('library')
-    # print db2
-    # PYTHONPATH=. python simple_database/main.py
-    # print db.authors
-    # print("db.authors = ")
-    # print db.authors
-    # print(db.authors.rows[0]['name'])
-    # print(str(db))
-    # q = db.authors.query(name='Jorge Luis Borges')
-    # #print db.authors
-    # for i, item in enumerate(q):
-    #     print i
-    #     print item.birth_date

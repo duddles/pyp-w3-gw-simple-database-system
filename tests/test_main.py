@@ -19,6 +19,8 @@ class SimpleDatabaseTestCase(unittest.TestCase):
         if os.path.exists(BASE_DB_FILE_PATH):
             shutil.rmtree(BASE_DB_FILE_PATH)
         
+        # add some time signatures in the db file names so that tests
+        #  don't break
         n = datetime.now()
         fmt = 'library{}' + '{:02}' * 5
         db_name = fmt.format(
@@ -26,6 +28,7 @@ class SimpleDatabaseTestCase(unittest.TestCase):
         )
         self.db = create_database(db_name)
         sleep(1)
+        
         # self.db = create_database('library')
         self.db.create_table('authors', columns=[
             {'name': 'id', 'type': 'int'},
@@ -60,8 +63,8 @@ class SimpleDatabaseTestCase(unittest.TestCase):
 
     def test_create_database_duplicated_name(self):
         with self.assertRaisesRegexp(ValidationError,
-                                     'Database with name "library" already exists.'):
-            create_database('library')
+                                     'Database with name "already_exists" already exists.'):
+            create_database('already_exists')
 
     def test_connect_existing_database(self):
         db = create_database('test-db1')
