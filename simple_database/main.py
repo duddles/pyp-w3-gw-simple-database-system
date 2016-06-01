@@ -2,18 +2,17 @@
 import os
 import json
 from datetime import date
-import yaml  # Avoids unicode conversion on json load
+import yaml  # PyYaml module, avoids unicode conversion on json load
 
 from simple_database.exceptions import ValidationError
 from simple_database.config import BASE_DB_FILE_PATH
 import copy
+import string
 
 # Commit changes immediately on making them?
 AUTOCOMMIT = True
 
-
 # Primary database access functions
-
 def create_database(db_name):
     '''
     Creates and returns a database as long as it does not already exist
@@ -35,12 +34,13 @@ def connect_database(db_name):
         raise ValidationError('Database does not exist.')
     
     with open(os.path.join(BASE_DB_FILE_PATH, db_name),'r') as f:
+        # Database object is stored as a list of Table dicts
         # [{}, {}, {}]
-        # where each dict is a table and has these key, value pairs:
+        # where each Table dict has these key, value pairs:
         # name: table name
-        # columns: list of dicts that is paramater for create table
+        # columns: list of dicts (paramaters needed for create_table)
         # rows: list of rows where each row is parameters for Table.insert
-        data = yaml.safe_load(f)
+        data = yaml.safe_load(f) # ensures strings wont be read in as unicode
         
         db = Database(db_name)
         for table in data:
@@ -57,16 +57,23 @@ def connect_database(db_name):
             
             # Insert the row in the db table
             for row in table['rows']:
-                db_table.insert(*row)
+                db_table.insert(*row) # unpack the row list into parameters
         
         return db
 
 # Datetime.date <-> string conversion functions for json serialization
 
-def _serialize_dt(dt_obj): # date -> string
+def _serialize_dt(dt_obj):
+    '''
+    Converts a datetime.date object to a string to be stored in the json file
+    '''
     return '{0.year}-{0.month:{1}}-{0.day:{1}}'.format(dt_obj, '02')
 
-def _deserialize_dt(value): # string -> datetime
+def _deserialize_dt(value):
+    '''
+    Converts a string extracted from a json database storage file to a 
+    datetime.date object to be used in a Database object
+    '''
     year = int(value[:4])
     month = int(value[5:7])
     day = int(value[8:])
@@ -75,7 +82,7 @@ def _deserialize_dt(value): # string -> datetime
 
 class Database(object):
     def __init__(self, db_name):
-        self._tables = []
+        self._tables = [] # list of Table objects
         self._db_name = db_name
         
     def __str__(self):
@@ -90,27 +97,35 @@ class Database(object):
         if hasattr(self, table_name):
             raise ValidationError('Duplicate table name')
         
-        # Make sure "table_name" is a valid name
-        #_validate_name(table_name)
+        # Make sure "table_name" is a valid name and doesn't start with underscore
+        if table_name[0].lower() not in string.ascii_lowercase:
+            raise ValidationError('Table name must begin with a character')
         
         new_table = Table(self, table_name, columns)
-        setattr(self, table_name, new_table)
+        setattr(self, table_name, new_table) # for example, db.authors
         self._tables.append(new_table)
         
-        # Commit changes
+        # Commit changes to file
         if AUTOCOMMIT:
             self.commit()
     
     def show_tables(self):
-       return [table.name for table in self._tables]
+        '''
+        Prints a list of table names in the database
+        '''
+        return [table.name for table in self._tables]
        
     def commit(self):
-        # write to a file in json format 
-        
+        '''
+        Writes the contents of the Database to a file in json format 
+        '''
         json_data = []
         for table in self._tables:
+            # We are converting date objects into strings when writing to file
+            # so use deepcopy to avoid changing the actual db.Table
             rows = copy.deepcopy(table.rows)
             
+            # temp_dict will hold all the data for the Table we are writing
             temp_dict = {}
             temp_dict['name'] = table.name
             temp_dict['columns'] = table.columns
@@ -127,19 +142,20 @@ class Database(object):
                 temp_dict['rows'].append(row)
             
             json_data.append(temp_dict)
-            
-        try:
-            with open(os.path.join(BASE_DB_FILE_PATH, self._db_name),'w') as f:
-                json.dump(json_data, f)
-        except:
+        
+        # Create the directory if it does not already exist
+        if not os.path.exists(BASE_DB_FILE_PATH):
             os.mkdir(BASE_DB_FILE_PATH)
-            with open(os.path.join(BASE_DB_FILE_PATH, self._db_name),'w') as f:
-                json.dump(json_data, f)
+            
+        # dump the json data to the file
+        with open(os.path.join(BASE_DB_FILE_PATH, self._db_name),'w') as f:
+            json.dump(json_data, f)
 
 class Table(object):
     def __init__(self, parent, name, columns):
         '''
-        Columns is a list of dictionaries [{'name': x, 'type': y}, ...]
+        parent is the database that contains the table
+        columns is a list of dictionaries [{'name': x, 'type': y}, ...]
         '''
         self.parent = parent # used by insert to call commit on the db instance
         self.name = name
@@ -154,11 +170,10 @@ class Table(object):
 
         # get the values for each row
         for row in self.rows:
-            row_s = '\t'.join(str(row[col_name]) for col_name in self.col_names)
+            row_s = '\t'.join(str(i) for i in row)
             s += row_s + '\n'
         return s
 
-        
     def count(self):
         '''
         Return the count of rows in the table.
@@ -175,8 +190,15 @@ class Table(object):
             raise ValidationError('Invalid amount of field')
         
         # use this to convert types that are in string format into types
-        type_dict = {'date': date}
-        type_dict.update(__builtins__)
+        type_dict = {
+            'date': date,
+            'int': int,
+            'str': str,
+            'bool': bool,
+        }
+        # type_dict.update(__builtins__) 
+        # builtins populates the rest of the dict with 'str':str, 'int':int, etc
+        # but this won't work when running main.py directly
         
         row_list = [] # The new entry will be stored as a list
         # Read in the args - they should be in the same order as self.columns
@@ -201,20 +223,14 @@ class Table(object):
     
     def describe(self):
         '''
-        Return the column configuration of the table.
+        Return the column configuration of the table
         '''
         return self.columns
-        # s = '['
-        # for row in self.columns:
-        #     s += '\t' + str(row)
-        # s += ']'
-        # return s
     
     def query(self, **kwargs):
         '''
-        Return an iterator, with each element that the
-        iterator returns containing values that match a row in the table
-        for which the query arguments match the query values given.
+        Return an iterator, where each element in the iterator is a row
+        that matches all the keywords and their values passed to the method.
         '''
         # Validate the keyword arguments passed to the query
         for key in kwargs.keys():

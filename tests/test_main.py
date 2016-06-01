@@ -4,6 +4,7 @@ import types
 import shutil
 import unittest
 from datetime import date
+import yaml
 
 from simple_database import create_database, connect_database
 from simple_database.config import BASE_DB_FILE_PATH
