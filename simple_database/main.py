@@ -42,24 +42,16 @@ def connect_database(db_name):
         # rows: list of rows where each row is parameters for Table.insert
         data = yaml.safe_load(f) # ensures strings wont be read in as unicode
         
-        db = Database(db_name)
-        for table in data:
-            db.create_table(table['name'], table['columns'])
-            db_table = getattr(db, table['name'])
-            
-            # Deserialize datetime.date objects.
-            # Inspect the columns for date objects
-            for i, column in enumerate(db_table.columns):
-                if column['type'] == 'date':
-                    # Deserialize values in the date object columns
-                    for row in table['rows']:
-                        row[i] = _deserialize_dt(row[i])
-            
-            # Insert the row in the db table
-            for row in table['rows']:
-                db_table.insert(*row) # unpack the row list into parameters
+    db = Database(db_name)
+    for table in data:
+        db.create_table(table['name'], table['columns'])
+        db_table = getattr(db, table['name'])
         
-        return db
+        # Deserialize datetime.date objects, converting from string -> date
+        db_table.rows = table['rows']            
+        db_table.rows = db_table.row_handler(_deserialize_dt)
+        
+    return db
 
 # Datetime.date <-> string conversion functions for json serialization
 
@@ -78,7 +70,6 @@ def _deserialize_dt(value):
     month = int(value[5:7])
     day = int(value[8:])
     return date(year, month, day)
-
 
 class Database(object):
     def __init__(self, db_name):
@@ -131,15 +122,12 @@ class Database(object):
             temp_dict['columns'] = table.columns
             temp_dict['rows'] = []
             
-            # Serialize datetime.date objects:
-            for pos, column in enumerate(temp_dict['columns']):
-                if column['type'] == 'date':
-                    for row in rows:
-                        row[pos] = _serialize_dt(row[pos])
+            # Serialize datetime.date objects, convert from date -> string
+            temp_dict['rows'] = table.row_handler(_serialize_dt)
             
             # Append the rows to the temporary dict
-            for row in rows:
-                temp_dict['rows'].append(row)
+            # for row in rows:
+            #     temp_dict['rows'].append(row)
             
             json_data.append(temp_dict)
         
@@ -229,8 +217,8 @@ class Table(object):
     
     def query(self, **kwargs):
         '''
-        Return an iterator, where each element in the iterator is a row
-        that matches all the keywords and their values passed to the method.
+        Generator that yields rows to iterate over
+        that match all the keywords and their values passed to the method.
         '''
         # Validate the keyword arguments passed to the query
         for key in kwargs.keys():
@@ -246,6 +234,7 @@ class Table(object):
             for key, value in kwargs.items():
                 if row[self.col_names.index(key)] != value:
                     matches = False
+                # we could add a check for missing data in the row
             if matches:
                 yield Row(self.col_names, row)
     
@@ -254,6 +243,21 @@ class Table(object):
         Return the whole list of rows in the table without filtering.
         '''
         return self.query()
+        
+    def row_handler(self, conversion_function):
+        '''
+        Checks for any columns that are of type date
+        Then applies the conversion_function to each row value at this column
+        The conversion will either go date -> string, or string -> date
+        It will then return the rows
+        '''
+        new_table = copy.deepcopy(self)
+        for pos, column in enumerate(new_table.columns):
+            if column['type'] == 'date':
+                for row in new_table.rows:
+                    row[pos] = conversion_function(row[pos])
+
+        return new_table.rows
     
 
 class Row(object):
