@@ -120,14 +120,9 @@ class Database(object):
             temp_dict = {}
             temp_dict['name'] = table.name
             temp_dict['columns'] = table.columns
-            temp_dict['rows'] = []
             
             # Serialize datetime.date objects, convert from date -> string
             temp_dict['rows'] = table.row_handler(_serialize_dt)
-            
-            # Append the rows to the temporary dict
-            # for row in rows:
-            #     temp_dict['rows'].append(row)
             
             json_data.append(temp_dict)
         
